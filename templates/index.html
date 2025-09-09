@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>YouTube Downloader</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-white">
+  <div class="container mt-5">
+    <h2 class="text-center">🎬 YouTube Video Downloader</h2>
+    <form method="POST" class="mt-4">
+      <div class="mb-3">
+        <input type="text" class="form-control" name="url" placeholder="Enter YouTube URL">
+      </div>
+      <button type="submit" class="btn btn-success w-100">Download</button>
+    </form>
+    {% if error %}
+      <div class="alert alert-danger mt-3">{{ error }}</div>
+    {% endif %}
+  </div>
+</body>
+</html>
