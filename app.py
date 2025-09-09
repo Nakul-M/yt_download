@@ -1,11 +1,30 @@
 from flask import Flask, render_template, request, send_file, after_this_request
 import yt_dlp
 import os
+import base64
 
 app = Flask(__name__)
 
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
+# --- Cookie setup ---
+COOKIE_FILE_PATH = None
+COOKIES_B64 = os.environ.get("COOKIES_B64")
+
+if COOKIES_B64:
+    try:
+        COOKIE_FILE_PATH = os.path.join(DOWNLOAD_FOLDER, "cookies.txt")
+        with open(COOKIE_FILE_PATH, "wb") as f:
+            f.write(base64.b64decode(COOKIES_B64))
+        print(f"[INFO] Cookies file created at {COOKIE_FILE_PATH}")
+    except Exception as e:
+        print("[ERROR] Could not decode COOKIES_B64:", e)
+        COOKIE_FILE_PATH = None
+elif os.path.exists("cookies.txt"):
+    COOKIE_FILE_PATH = os.path.abspath("cookies.txt")
+    print("[INFO] Using local cookies.txt")
+
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -20,8 +39,11 @@ def index():
                 "format": "bestvideo+bestaudio/best",
                 "merge_output_format": "mp4",
                 "nocheckcertificate": True,
-                "noplaylist": True   # only download one video
+                "noplaylist": True
             }
+
+            if COOKIE_FILE_PATH:
+                ydl_opts["cookiefile"] = COOKIE_FILE_PATH
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -33,7 +55,6 @@ def index():
             # Debug log
             print(f"Preparing to send file: {filepath}, exists={os.path.exists(filepath)}")
 
-            # Delete file after sending
             @after_this_request
             def remove_file(response):
                 try:
