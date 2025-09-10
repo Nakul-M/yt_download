@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: yt-downloader-web
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PORT
+        value: "5000"
+      - key: DOWNLOAD_FOLDER
+        value: "/downloads"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: yt-downloader-redis
+          property: connectionString
+    disk:
+      name: downloads-disk
+      mountPath: /downloads
+      sizeGB: 5
+
+  - type: worker
+    name: yt-downloader-worker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker.py
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DOWNLOAD_FOLDER
+        value: "/downloads"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: yt-downloader-redis
+          property: connectionString
+    disk:
+      name: downloads-disk
+      mountPath: /downloads
+      sizeGB: 5
+
+  - type: redis
+    name: yt-downloader-redis
+    ipAllowList: [] # only accessible by web + worker

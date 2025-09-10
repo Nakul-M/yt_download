@@ -1,11 +1,13 @@
-from flask import Flask, render_template, request, send_file, after_this_request
+from flask import Flask, render_template, request, send_file, after_this_request, send_from_directory
 import yt_dlp
 import os
 import base64
+import uuid
 
 app = Flask(__name__)
 
-DOWNLOAD_FOLDER = "downloads"
+# Use persistent disk if available (Render) else fallback to local "downloads"
+DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # --- Cookie setup ---
@@ -34,8 +36,12 @@ def index():
             return render_template("index.html", error="Please enter a URL")
 
         try:
+            # Unique filename per request to avoid conflicts
+            uid = str(uuid.uuid4())
+            outtmpl = os.path.join(DOWNLOAD_FOLDER, f"{uid}_%(title)s.%(ext)s")
+
             ydl_opts = {
-                "outtmpl": os.path.join(DOWNLOAD_FOLDER, "%(title)s.%(ext)s"),
+                "outtmpl": outtmpl,
                 "format": "bestvideo+bestaudio/best",
                 "merge_output_format": "mp4",
                 "nocheckcertificate": True,
@@ -49,22 +55,14 @@ def index():
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
 
-            # Get absolute path (important for send_file)
             filepath = os.path.abspath(filename)
+            print(f"[DEBUG] File ready: {filepath}, exists={os.path.exists(filepath)}")
 
-            # Debug log
-            print(f"Preparing to send file: {filepath}, exists={os.path.exists(filepath)}")
-
-            @after_this_request
-            def remove_file(response):
-                try:
-                    os.remove(filepath)
-                    print(f"Deleted file: {filepath}")
-                except Exception as e:
-                    print(f"Error deleting file: {e}")
-                return response
-
-            return send_file(filepath, as_attachment=True)
+            # Instead of direct send (may timeout), give user a link
+            download_name = os.path.basename(filepath)
+            return render_template("index.html", 
+                                   message=f"Download complete! Click below:",
+                                   download_link=f"/downloads/{download_name}")
 
         except Exception as e:
             return render_template("index.html", error=f"Error: {str(e)}")
@@ -72,5 +70,27 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/downloads/<filename>")
+def serve_download(filename):
+    """Serve a file from the download folder and delete it after sending."""
+    filepath = os.path.join(DOWNLOAD_FOLDER, filename)
+
+    if not os.path.exists(filepath):
+        return f"File not found: {filename}", 404
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(filepath)
+            print(f"[INFO] Deleted file after send: {filepath}")
+        except Exception as e:
+            print(f"[ERROR] Failed to delete {filepath}: {e}")
+        return response
+
+    # Use send_file instead of send_from_directory (more reliable cleanup)
+    return send_file(filepath, as_attachment=True)
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Bind to 0.0.0.0 for Render
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 3001)), debug=True)
